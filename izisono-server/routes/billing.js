@@ -54,6 +54,10 @@ async function creditFromPayment(paymentId){
   if(!paymentId) throw new Error('payment_id_missing');
   const verified=await moneroo(`/v1/payments/${encodeURIComponent(paymentId)}/verify`);
   const p=verified?.data||{};
+  const paymentStatus=String(p.status||'').toLowerCase();
+  if(paymentStatus!=='success') {
+    return {credited:false,creditsAdded:0,status:p.status||'unknown',paymentId};
+  }
   const meta=p.metadata||p.context?.metadata||{};
   const userId=meta.user_id||meta.customer_id;
   const planId=meta.plan_id;
@@ -142,7 +146,10 @@ router.post('/webhook',async(req,res)=>{
       }
     }
     return res.status(200).send('ok');
-  }catch(e){console.error('Moneroo webhook failed',e);return res.status(200).send('received');}
+  }catch(e){
+    console.error('Moneroo webhook failed',e);
+    return res.status(e.status && e.status >= 400 ? e.status : 500).send('webhook_processing_failed');
+  }
 });
 
 export { PLANS, PAYMENT_METHODS, creditFromPayment };

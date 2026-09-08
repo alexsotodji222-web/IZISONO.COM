@@ -29,7 +29,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Le webhook Stripe a besoin du corps brut
+// Le webhook Moneroo a besoin du corps brut
 app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
@@ -79,7 +79,7 @@ app.get('*', (req, res) => {
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-  console.log(`🎵 izisono backend prêt sur http://localhost:${port}`);
+  console.log(`🎵 izisono backend prêt sur le port ${port}`);
   console.log(`📍 Localisation: Togo (Francophone)`);
   console.log(`💱 Monnaie: ${CURRENCY_CONFIG.name} (${CURRENCY_CONFIG.code})`);
   console.log(`🌍 Langues: ${Object.keys(SUPPORTED_LANGUAGES).join(', ')}`);
