@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import billingRoutes from './routes/billing.js';
 import lyricsRoutes from './routes/lyrics.js';
@@ -13,6 +14,7 @@ import { CURRENCY_CONFIG, SUPPORTED_LANGUAGES } from '../izisono-config/i18n.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const AUDIO_DIR = path.join(__dirname, 'audio');
+const FRONTEND_DIR = path.join(__dirname, '..', 'izisono-frontend');
 const allowedOrigins = new Set(String(process.env.CLIENT_URL || 'http://localhost:3000').split(',').map(x=>x.trim()).filter(Boolean));
 
 // Configuration CORS pour les langues du Togo
@@ -67,18 +69,32 @@ app.use('/api/admin', adminRoutes);
 // Fichiers audio générés
 app.use('/audio', express.static(AUDIO_DIR));
 
-app.get('/admin', (_req,res) => res.sendFile(path.join(__dirname, '..', 'izisono-frontend', 'admin.html')));
-  // Frontend statique
-app.use(express.static(path.join(__dirname, '..', 'izisono-frontend')));
-
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({ status: 'ok', app: 'izisono' });
 });
 
+app.get('/admin', (_req,res) => res.sendFile(path.join(FRONTEND_DIR, 'admin.html')));
+
+// Serve the main browser module explicitly. This avoids Render/static-middleware
+// edge cases that can turn /script.js into a 500 and leave the auth buttons dead.
+app.get('/script.js', async (_req, res) => {
+  try {
+    const source = await fs.readFile(path.join(FRONTEND_DIR, 'script.js'), 'utf8');
+    res.set({ 'Content-Type':'application/javascript; charset=UTF-8', 'Cache-Control':'no-store' });
+    res.status(200).send(source);
+  } catch (error) {
+    console.error('Failed to serve frontend script:', error);
+    res.status(500).type('text/plain').send('frontend_script_unavailable');
+  }
+});
+
+// Frontend statique
+app.use(express.static(FRONTEND_DIR, { fallthrough: true }));
+
 // SPA fallback
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'izisono-frontend', 'index.html'));
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
 });
 
 const port = process.env.PORT || 3000;

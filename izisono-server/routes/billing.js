@@ -94,25 +94,37 @@ router.post('/checkout',async(req,res)=>{
     if(!plan) return res.status(400).json({error:'invalid_plan'});
     const publicUrl=String(process.env.PUBLIC_APP_URL||process.env.CLIENT_URL||'http://localhost:3000').split(',')[0].trim().replace(/\/$/,'');
     const email=user.email||'';
+    const customerName=(email.split('@')[0]||'Utilisateur').replace(/[^a-zA-ZÀ-ÿ0-9 _-]/g,' ').trim().slice(0,60)||'Utilisateur';
     const payload={
       amount:plan.price,
       currency:'XOF',
       description:`izisono — ${plan.name} — ${plan.credits} Notes`,
-      customer:{email,first_name:(email.split('@')[0]||'Utilisateur')},
+      customer:{email,first_name:customerName,last_name:'Izisono'},
       return_url:`${publicUrl}/?payment=return`,
       metadata:{user_id:user.id,plan_id:plan.id,credits:String(plan.credits),product:'izisono_notes'}
     };
-    let data;
-    try{
-      // Moneroo can reject a method that is globally supported but not enabled
-      // on the merchant account. Try the user's selection first, then fall back
-      // to the hosted checkout with all enabled methods.
-      data=await moneroo('/v1/payments/initialize',{method:'POST',body:JSON.stringify(requestedMethod!=='all'?{...payload,methods:[requestedMethod]}:payload)});
-    }catch(firstError){
-      if(requestedMethod==='all') throw firstError;
-      console.warn('Selected Moneroo method rejected; retrying hosted checkout',firstError.payload||firstError.message);
-      data=await moneroo('/v1/payments/initialize',{method:'POST',body:JSON.stringify(payload)});
+    const attempts=[];
+    const selectedPayload=requestedMethod!=='all'?{...payload,methods:[requestedMethod]}:payload;
+    attempts.push(selectedPayload);
+    // If Moneroo rejects optional metadata/customer fields, retry with the
+    // smallest documented checkout payload instead of exposing a 500 to users.
+    attempts.push({amount:payload.amount,currency:payload.currency,description:payload.description,customer:{email,first_name:customerName},return_url:payload.return_url});
+    let data=null;
+    let lastError=null;
+    for(let i=0;i<attempts.length;i++){
+      try{
+        data=await moneroo('/v1/payments/initialize',{method:'POST',body:JSON.stringify(attempts[i])});
+        break;
+      }catch(error){
+        lastError=error;
+        console.warn(`Moneroo checkout attempt ${i+1} failed`,error.payload||error.message);
+        // If a specific method was rejected, the next attempt is hosted checkout.
+        if(i===0 && requestedMethod!=='all'){
+          attempts.push(payload);
+        }
+      }
     }
+    if(!data) throw lastError||new Error('moneroo_checkout_failed');
     // Current Moneroo responses use data.checkout_url; keep data.link as a compatibility fallback.
     const checkoutUrl=data?.data?.checkout_url||data?.data?.link||data?.checkout_url||data?.link;
     if(!checkoutUrl) throw new Error('moneroo_checkout_url_missing');
@@ -161,7 +173,7 @@ router.post('/webhook',async(req,res)=>{
       }
     }
     return res.status(200).send('ok');
-  }catch(e){console.error('Moneroo webhook failed',e);return res.status(200).send('received');}
+  }catch(e){console.error('Moneroo webhook failed',e);return res.status(e.status||500).send('webhook_processing_failed');}
 });
 
 export { PLANS, PAYMENT_METHODS, creditFromPayment };
