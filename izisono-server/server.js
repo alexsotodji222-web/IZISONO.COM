@@ -6,16 +6,18 @@ import { fileURLToPath } from 'node:url';
 import billingRoutes from './routes/billing.js';
 import lyricsRoutes from './routes/lyrics.js';
 import languageRoutes from './routes/language.js';
-import musicRoutes from './routes/music.js';
+import musicRoutes, { recoverPendingGenerations } from './routes/music.js';
+import adminRoutes from './routes/admin.js';
 import { CURRENCY_CONFIG, SUPPORTED_LANGUAGES } from '../izisono-config/i18n.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const AUDIO_DIR = path.join(__dirname, 'audio');
+const allowedOrigins = new Set(String(process.env.CLIENT_URL || 'http://localhost:3000').split(',').map(x=>x.trim()).filter(Boolean));
 
 // Configuration CORS pour les langues du Togo
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: (origin, cb) => { if (!origin || allowedOrigins.has(origin)) return cb(null, true); cb(new Error('cors_origin_not_allowed')); },
   credentials: true,
   optionsSuccessStatus: 200,
 }));
@@ -29,7 +31,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Le webhook Moneroo a besoin du corps brut
+// Le webhook Stripe a besoin du corps brut
 app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
@@ -38,11 +40,13 @@ app.use('/api', musicRoutes);
 app.use('/api', lyricsRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/language', languageRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Fichiers audio générés
 app.use('/audio', express.static(AUDIO_DIR));
 
-// Frontend statique
+app.get('/admin', (_req,res) => res.sendFile(path.join(__dirname, '..', 'izisono-frontend', 'admin.html')));
+  // Frontend statique
 app.use(express.static(path.join(__dirname, '..', 'izisono-frontend')));
 
 // Route info pour les informations de configuration
@@ -78,10 +82,12 @@ app.get('*', (req, res) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`🎵 izisono backend prêt sur le port ${port}`);
+app.listen(port, async () => {
+  console.log(`🎵 izisono backend prêt sur http://localhost:${port}`);
   console.log(`📍 Localisation: Togo (Francophone)`);
   console.log(`💱 Monnaie: ${CURRENCY_CONFIG.name} (${CURRENCY_CONFIG.code})`);
   console.log(`🌍 Langues: ${Object.keys(SUPPORTED_LANGUAGES).join(', ')}`);
-  console.log(`🤖 Fournisseur: ${process.env.MUSIC_PROVIDER || 'mock'}`);
+  console.log(`🤖 Fournisseur: ${process.env.MUSIC_PROVIDER || 'mureka'}`);
+  await recoverPendingGenerations();
+  setInterval(() => recoverPendingGenerations().catch(()=>{}), 5 * 60 * 1000);
 });
