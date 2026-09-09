@@ -92,21 +92,40 @@ router.post('/checkout',async(req,res)=>{
     const supportedMethods=PAYMENT_METHODS.map(m=>m.code);
     if(requestedMethod!=='all'&&!supportedMethods.includes(requestedMethod)) return res.status(400).json({error:'invalid_payment_method'});
     if(!plan) return res.status(400).json({error:'invalid_plan'});
-    const publicUrl=process.env.PUBLIC_APP_URL||process.env.CLIENT_URL||'http://localhost:3000';
+    const publicUrl=String(process.env.PUBLIC_APP_URL||process.env.CLIENT_URL||'http://localhost:3000').split(',')[0].trim().replace(/\/$/,'');
     const email=user.email||'';
-    const data=await moneroo('/v1/payments/initialize',{method:'POST',body:JSON.stringify({
+    const payload={
       amount:plan.price,
       currency:'XOF',
       description:`izisono — ${plan.name} — ${plan.credits} Notes`,
       customer:{email,first_name:(email.split('@')[0]||'Utilisateur')},
       return_url:`${publicUrl}/?payment=return`,
-      metadata:{user_id:user.id,plan_id:plan.id,credits:String(plan.credits),product:'izisono_notes'},
-      ...(requestedMethod!=='all'?{methods:[requestedMethod]}:{})
-    })});
-    const checkoutUrl=data?.data?.checkout_url||data?.checkout_url;
+      metadata:{user_id:user.id,plan_id:plan.id,credits:String(plan.credits),product:'izisono_notes'}
+    };
+    let data;
+    try{
+      // Moneroo can reject a method that is globally supported but not enabled
+      // on the merchant account. Try the user's selection first, then fall back
+      // to the hosted checkout with all enabled methods.
+      data=await moneroo('/v1/payments/initialize',{method:'POST',body:JSON.stringify(requestedMethod!=='all'?{...payload,methods:[requestedMethod]}:payload)});
+    }catch(firstError){
+      if(requestedMethod==='all') throw firstError;
+      console.warn('Selected Moneroo method rejected; retrying hosted checkout',firstError.payload||firstError.message);
+      data=await moneroo('/v1/payments/initialize',{method:'POST',body:JSON.stringify(payload)});
+    }
+    // Current Moneroo responses use data.checkout_url; keep data.link as a compatibility fallback.
+    const checkoutUrl=data?.data?.checkout_url||data?.data?.link||data?.checkout_url||data?.link;
     if(!checkoutUrl) throw new Error('moneroo_checkout_url_missing');
     const paymentId=data?.data?.id||data?.id||null;
-    if(paymentId) await createPaymentTransaction({userId:user.id,paymentId,plan,method:requestedMethod==='all'?null:requestedMethod,rawPayload:data,status:'initiated'});
+    // Recording the transaction must never prevent the customer from reaching checkout.
+    // Fulfillment remains webhook/verification driven and idempotent in Supabase.
+    if(paymentId){
+      try{
+        await createPaymentTransaction({userId:user.id,paymentId,plan,method:requestedMethod==='all'?null:requestedMethod,rawPayload:data,status:'initiated'});
+      }catch(recordError){
+        console.error('Payment initialized but local transaction recording failed',recordError);
+      }
+    }
     res.json({ok:true,checkout_url:checkoutUrl,payment_id:paymentId,plan});
   }catch(e){console.error('Moneroo checkout failed',e);res.status(e.status||500).json({error:e.message||'checkout_failed',details:e.payload})}
 });

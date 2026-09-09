@@ -35,22 +35,9 @@ app.use((req, res, next) => {
 app.use('/api/billing/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
-// Routes API
-app.use('/api', musicRoutes);
-app.use('/api', lyricsRoutes);
-app.use('/api/billing', billingRoutes);
-app.use('/api/language', languageRoutes);
-app.use('/api/admin', adminRoutes);
-
-// Fichiers audio générés
-app.use('/audio', express.static(AUDIO_DIR));
-
-app.get('/admin', (_req,res) => res.sendFile(path.join(__dirname, '..', 'izisono-frontend', 'admin.html')));
-  // Frontend statique
-app.use(express.static(path.join(__dirname, '..', 'izisono-frontend')));
-
-// Route info pour les informations de configuration
+// Public runtime configuration must be registered before the generic /api routers.
 app.get('/api/config', (req, res) => {
+  res.set('Cache-Control','no-store');
   res.json({
     app: 'izisono',
     supabase: { url: process.env.SUPABASE_URL || '', publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || '' },
@@ -70,6 +57,19 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+// Routes API
+app.use('/api', musicRoutes);
+app.use('/api', lyricsRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/language', languageRoutes);
+app.use('/api/admin', adminRoutes);
+
+// Fichiers audio générés
+app.use('/audio', express.static(AUDIO_DIR));
+
+app.get('/admin', (_req,res) => res.sendFile(path.join(__dirname, '..', 'izisono-frontend', 'admin.html')));
+  // Frontend statique
+app.use(express.static(path.join(__dirname, '..', 'izisono-frontend')));
 
 // Health check
 app.get('/health', (req, res) => {

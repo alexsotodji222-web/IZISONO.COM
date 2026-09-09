@@ -103,3 +103,10 @@ Pour plusieurs origines autorisées, `CLIENT_URL` peut être une liste séparée
 ## Dernière configuration manuelle Supabase
 
 Consulte `SUPABASE-PRODUCTION-CHECKLIST.md` pour l'activation de **Leaked Password Protection**, qui est une configuration Auth et non une migration SQL.
+
+
+## Correctif connexion V11
+- L’interface est initialisée avant le démarrage Supabase : un échec du CDN ou de `/api/config` ne rend plus les boutons muets.
+- Le SDK Supabase est chargé dynamiquement avec un fallback jsDelivr.
+- Le parsing de `localStorage` des notifications est protégé contre les données corrompues.
+- `/api/config` est enregistré avant les routeurs `/api` et envoyé avec `Cache-Control: no-store`.

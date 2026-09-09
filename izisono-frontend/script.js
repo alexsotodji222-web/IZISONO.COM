@@ -1,17 +1,38 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
 const API='/api';
 const LANGS=[
   ['fr','🇫🇷 Français'],['en','🇬🇧 English'],['ee','🇹🇬 Eʋegbe (Ewe)'],['mina','🇹🇬 Mina / Gen'],['kbp','🇹🇬 Kabyè'],['tem','🇹🇬 Tem'],['ife','🇹🇬 Ifè'],['nawdm','🇹🇬 Nawdm'],['bass','🇹🇬 Bassar'],['kon','🇹🇬 Konkomba'],['ha','🌍 Hausa'],['yo','🌍 Yoruba'],['tw','🌍 Twi']
 ];
-const state={lang:localStorage.getItem('izisono_lang')||'fr',occasion:'birthday',supabase:null,user:null,config:null,profile:null,notifications:JSON.parse(localStorage.getItem('izisono_notifications')||'[]'),plans:[],selectedPlan:localStorage.getItem('izisono_selected_plan')||'popular',paymentMethod:'togocel'};
+function safeLocalJson(key,fallback){try{const raw=localStorage.getItem(key);return raw?JSON.parse(raw):fallback}catch(e){console.warn('localStorage reset:',key,e);localStorage.removeItem(key);return fallback}}
+const state={lang:localStorage.getItem('izisono_lang')||'fr',occasion:'birthday',supabase:null,user:null,config:null,profile:null,notifications:safeLocalJson('izisono_notifications',[]),plans:[],selectedPlan:localStorage.getItem('izisono_selected_plan')||'popular',paymentMethod:'all'};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 function toast(m){const x=$('#toast');x.textContent=m;x.classList.add('show');setTimeout(()=>x.classList.remove('show'),3200)}
 function addNotification(title,text){state.notifications.unshift({id:Date.now(),title,text,time:new Date().toISOString()});state.notifications=state.notifications.slice(0,12);localStorage.setItem('izisono_notifications',JSON.stringify(state.notifications));renderNotifications();}
 function renderNotifications(){const list=$('#notificationList');if(!list)return;list.innerHTML=state.notifications.length?state.notifications.map(n=>`<div class="notification-item"><span>♪</span><div><b>${esc(n.title)}</b><p>${esc(n.text)}</p><small>${new Date(n.time).toLocaleString()}</small></div></div>`).join(''):'<div class="notification-empty">Aucune notification pour le moment.</div>';$('#notificationDot').hidden=!state.notifications.length;}
 async function api(path,opt={}){const headers={'Content-Type':'application/json','Accept-Language':state.lang,...(opt.headers||{})};if(state.supabase){const {data}=await state.supabase.auth.getSession();if(data.session?.access_token)headers.Authorization=`Bearer ${data.session.access_token}`;}const r=await fetch(API+path,{...opt,headers});const body=await r.json().catch(()=>({}));if(!r.ok){const messages={email_confirmation_required:'Confirme ton adresse email avant de générer une chanson.',generation_rate_limited:'Trop de demandes. Attends une minute puis réessaie.',too_many_active_generations:'Tu as déjà trop de générations en cours.',daily_generation_limit:'La limite quotidienne de générations a été atteinte.',insufficient_credits:'Tu n’as pas assez de Notes.',mureka_api_key_missing:'Le service de génération IA n’est pas configuré.',moneroo_secret_key_missing:'Le paiement Moneroo n’est pas configuré.'};throw new Error(messages[body.error]||body.error||body.message||'Erreur');}return body}
-async function bootSupabase(){const cfg=await api('/config');state.config=cfg;if(!cfg.supabase?.url||!cfg.supabase?.publishableKey)throw new Error('Supabase non configuré');state.supabase=createClient(cfg.supabase.url,cfg.supabase.publishableKey);const {data}=await state.supabase.auth.getUser();state.user=data.user||null;state.supabase.auth.onAuthStateChange((_event,session)=>{state.user=session?.user||null;renderAuth();loadTracks();loadCredits();renderProfile();});}
+async function bootSupabase(){
+  const cfg=await api('/config');
+  state.config=cfg;
+  if(!cfg.supabase?.url||!cfg.supabase?.publishableKey)throw new Error('Supabase non configuré');
+  let createClient;
+  try{
+    ({createClient}=await import('https://esm.sh/@supabase/supabase-js@2'));
+  }catch(first){
+    console.warn('Supabase CDN esm.sh indisponible, tentative jsDelivr',first);
+    try{
+      ({createClient}=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'));
+    }catch(second){
+      throw new Error('Impossible de charger le module Supabase. Vérifie ta connexion ou désactive le bloqueur de contenu.');
+    }
+  }
+  state.supabase=createClient(cfg.supabase.url,cfg.supabase.publishableKey);
+  const {data,error}=await state.supabase.auth.getUser();
+  if(error&&error.message!=='Auth session missing')console.warn('Supabase getUser:',error.message);
+  state.user=data?.user||null;
+  state.supabase.auth.onAuthStateChange((_event,session)=>{
+    state.user=session?.user||null;renderAuth();loadTracks();loadCredits();renderProfile();
+  });
+}
 function renderAuth(){const b=$('#loginBtn'), mobile=$('#mobileProfileBtn'), bottom=$('#bottomProfileAvatar'), avatar=$('#mobileProfileAvatar');if(state.user){const label=(state.user.email||'Compte').split('@')[0];b.textContent=`${label} · Profil`;b.onclick=()=>showPage('profile');const initial=(label.charAt(0)||'U').toUpperCase();if(avatar)avatar.textContent=initial;if(bottom)bottom.textContent=initial;}else{b.textContent='Se connecter';b.onclick=login;if(avatar)avatar.textContent='I';if(bottom)bottom.textContent='◉';}if(mobile)mobile.onclick=()=>state.user?showPage('profile'):login();}
 async function loadCredits(){if(!state.user){$('#creditsDisplay').textContent='Connecte-toi';$('#headerNotes').textContent='0';return}try{const d=await api('/me');state.profile=d;$('#creditsDisplay').textContent=`${d.credits} Notes`;
 $('#headerNotes').textContent=d.credits;$('#notesBalance').textContent=d.credits;renderProfile();}catch{}}
@@ -37,4 +58,18 @@ function handlePaymentReturn(){const p=new URLSearchParams(location.search);if(!
 function setMobileNavActive(target){document.querySelectorAll('[data-bottom-nav]').forEach(b=>b.classList.toggle('active',b.dataset.bottomNav===target));}
 function goMobileNav(target){$('#mobileMenu').hidden=true;setMobileNavActive(target);if(target==='home'){restoreMain();location.hash='top';return;}if(target==='create'){restoreMain();location.hash='create';setTimeout(()=>$('#promptInput')?.focus({preventScroll:true}),250);return;}if(target==='library'){restoreMain();location.hash='library';return;}if(target==='explore'){restoreMain();location.hash='explore';return;}if(target==='profile'){showPage('profile');return;}if(target==='notes'){showPage('notes');return;}}
 function init(){loadOccasions();loadPlans();renderNotifications();$('#promptForm').onsubmit=generate;$('#loginCancel').onclick=()=>$('#loginModal').hidden=true;$('#loginForm').onsubmit=async e=>{e.preventDefault();const email=$('#loginEmail').value.trim();const usePassword=$('#loginUsePassword')?.checked;const password=$('#loginPassword')?.value||'';try{let result;if(usePassword){if(!password)throw new Error('Entre ton mot de passe.');result=await state.supabase.auth.signInWithPassword({email,password});}else{result=await state.supabase.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin}});}if(result.error)throw result.error;if(usePassword){$('#loginModal').hidden=true;renderAuth();await loadCredits();await loadTracks();toast('Connexion réussie.');const {data}=await state.supabase.auth.getSession();if(data.session?.user?.app_metadata?.role==='admin')setTimeout(()=>location.href='/admin',300);}else{$('#loginModal').hidden=true;toast('Lien de connexion envoyé par email.');addNotification('Connexion',`Lien de connexion envoyé à ${email}.`);}}catch(err){toast(err.message||'Connexion impossible.');}};$('#loginUsePassword').onchange=e=>{const on=e.target.checked;$('#loginPassword').required=on;$('#loginPassword').hidden=!on;$('#loginPassword').value=on?'':$('#loginPassword').value;$('#loginHint').textContent=on?'Entre ton email et ton mot de passe.':'Entre ton email : nous t’enverrons un lien de connexion sécurisé.';};$('#loginPassword').hidden=true;$('#newTrackBtn').onclick=()=>{$('#resultSection').hidden=true;location.hash='create'};$('#languageSelect').value=state.lang;$('#songLanguageSelect').value=state.lang;$('#languageSelect').onchange=e=>{state.lang=e.target.value;localStorage.setItem('izisono_lang',state.lang);$('#songLanguageSelect').value=state.lang;$('#mobileLanguageSelect').value=state.lang;loadOccasions()};$('#songLanguageSelect').onchange=e=>{state.lang=e.target.value;localStorage.setItem('izisono_lang',state.lang);$('#languageSelect').value=state.lang};$('#notesBtn').onclick=()=>showPage('notes');$('#profileBuy').onclick=()=>showPage('notes');$('#continuePlanBtn').onclick=showPaymentPage;$('#paymentBack').onclick=()=>showPage('notes');document.querySelectorAll('.payment-method').forEach(b=>b.onclick=()=>{state.paymentMethod=b.dataset.method;document.querySelectorAll('.payment-method').forEach(x=>x.classList.toggle('selected',x===b));});$('#payNowBtn').onclick=()=>{if(!state.selectedPlan)return toast('Choisis un forfait.');buyPlan(state.selectedPlan)};$('#profileLibrary').onclick=()=>{restoreMain();location.hash='library'};$('#profileNotifications').onclick=()=>{$('#notificationPanel').hidden=false};$('#saveProfileBtn').onclick=saveProfile;$('#profileBack').onclick=restoreMain;$('#notesBack').onclick=restoreMain;$('#notificationBtn').onclick=()=>{$('#notificationPanel').hidden=!$('#notificationPanel').hidden};$('#notificationClose').onclick=()=>$('#notificationPanel').hidden=true;$('#profileLogout').onclick=async()=>{await state.supabase.auth.signOut();restoreMain();toast('Déconnexion effectuée.')};bindPromptHelpers();$('#mobileMenuBtn').onclick=()=>$('#mobileMenu').hidden=!$('#mobileMenu').hidden;$('#mobileMenuClose').onclick=()=>$('#mobileMenu').hidden=true;document.querySelectorAll('[data-mobile-nav]').forEach(b=>b.onclick=()=>goMobileNav(b.dataset.mobileNav));document.querySelectorAll('[data-bottom-nav]').forEach(b=>b.onclick=()=>goMobileNav(b.dataset.bottomNav));document.addEventListener('click',e=>{const menu=$('#mobileMenu');if(menu&&!menu.hidden&&!menu.contains(e.target)&&!$('#mobileMenuBtn').contains(e.target))menu.hidden=true;});$('#mobileLanguageSelect').value=state.lang;$('#mobileLanguageSelect').onchange=e=>{state.lang=e.target.value;localStorage.setItem('izisono_lang',state.lang);$('#languageSelect').value=state.lang;$('#songLanguageSelect').value=state.lang;loadOccasions();$('#mobileMenu').hidden=true;};}
-document.addEventListener('DOMContentLoaded',async()=>{try{await bootSupabase();init();renderAuth();loadTracks();loadCredits();handlePaymentReturn();}catch(e){console.error(e);toast(e.message)}});
+document.addEventListener('DOMContentLoaded',async()=>{
+  // Bind the UI immediately. A temporary Supabase/CDN failure must never make the buttons appear dead.
+  try{init();renderAuth();}catch(e){console.error('UI init failed',e);toast('Erreur de chargement de l’interface.');return}
+  try{
+    await bootSupabase();
+    renderAuth();
+    loadTracks();
+    loadCredits();
+    handlePaymentReturn();
+  }catch(e){
+    console.error('Supabase boot failed',e);
+    toast(e.message||'Connexion au service impossible. Recharge la page.');
+    renderAuth();
+  }
+});
