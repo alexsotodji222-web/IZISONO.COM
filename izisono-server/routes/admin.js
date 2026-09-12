@@ -71,17 +71,17 @@ router.get('/generations', async (req,res)=>{
 });
 
 router.get('/payments', async (req,res)=>{
-  try { const db=createAdminDb(); const rows=await db.select('payment_transactions','?select=id,user_id,payment_id,plan_id,amount,currency,credits,status,method,gateway,raw_payload,created_at,processed_at&order=created_at.desc&limit=200'); res.json({payments:rows||[]});
+  try { const db=createAdminDb(); const rows=await db.select('payment_transactions','?select=id,user_id,moneroo_payment_id,plan_id,amount,currency,credits,status,method,gateway,raw_payload,created_at,processed_at&order=created_at.desc&limit=200'); res.json({payments:rows||[]});
   }catch(e){res.status(e.status||500).json({error:e.message||'admin_payments_failed'});}
 });
 
 router.patch('/payments/:id', async (req,res)=>{
-  try { const id=req.params.id; assertUuid(id); const status=String(req.body?.status||''); if(!['pending','initiated','failed','cancelled'].includes(status)) throw Object.assign(new Error('success_requires_paydunya_reconciliation'),{status:400}); const db=createAdminDb(); const updated=await db.update('payment_transactions',{status,updated_at:new Date().toISOString()},`id=eq.${encodeURIComponent(id)}`,'id,status,updated_at'); await audit(req.admin.user.id,'payment_status_updated','payment',id,{status}); res.json({payment:updated?.[0]||updated});
+  try { const id=req.params.id; assertUuid(id); const status=String(req.body?.status||''); if(!['pending','initiated','failed','cancelled'].includes(status)) throw Object.assign(new Error('success_requires_moneroo_reconciliation'),{status:400}); const db=createAdminDb(); const updated=await db.update('payment_transactions',{status,updated_at:new Date().toISOString()},`id=eq.${encodeURIComponent(id)}`,'id,status,updated_at'); await audit(req.admin.user.id,'payment_status_updated','payment',id,{status}); res.json({payment:updated?.[0]||updated});
   }catch(e){res.status(e.status||500).json({error:e.message||'payment_update_failed'});}
 });
 
 router.post('/payments/:id/reconcile', async (req,res)=>{
-  try { const id=req.params.id; assertUuid(id); const db=createAdminDb(); const rows=await db.select('payment_transactions',`?id=eq.${encodeURIComponent(id)}&select=payment_id`); const paymentId=rows?.[0]?.payment_id; if(!paymentId) throw Object.assign(new Error('payment_not_found'),{status:404}); const result=await creditFromPayment(paymentId); await audit(req.admin.user.id,'payment_reconciled','payment',id,{paymentId,credited:!!result?.credited}); res.json(result);
+  try { const id=req.params.id; assertUuid(id); const db=createAdminDb(); const rows=await db.select('payment_transactions',`?id=eq.${encodeURIComponent(id)}&select=moneroo_payment_id`); const paymentId=rows?.[0]?.moneroo_payment_id; if(!paymentId) throw Object.assign(new Error('payment_not_found'),{status:404}); const result=await creditFromPayment(paymentId); await audit(req.admin.user.id,'payment_reconciled','payment',id,{paymentId,credited:!!result?.credited}); res.json(result);
   }catch(e){res.status(e.status||500).json({error:e.message||'payment_reconcile_failed'});}
 });
 

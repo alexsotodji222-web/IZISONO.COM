@@ -14,19 +14,15 @@ export const SUPPORTED_LANGUAGES = {
 };
 
 export const CURRENCY_CONFIG = {
-  // Display currency requested for the Izisono credit shop.
-  // PayDunya payment invoices remain XOF because its documented Togo channels are XOF.
-  code: 'ZAR',
-  symbol: 'ZAR',
-  name: 'Rand sud-africain',
-  nativeName: 'Rand sud-africain',
-  decimals: 2,
-  locale: 'fr-ZA',
-  payment_code: 'XOF',
+  code: 'XOF', // Franc CFA (West African CFA franc)
+  symbol: 'Fr',
+  name: 'Franc CFA',
+  nativeName: 'Franc CFA',
+  decimals: 0,
+  locale: 'fr-TG',
   exchange_rates: {
-    XOF: 0.02845, // UI-only reference rate: 1 XOF ≈ 0.02845 ZAR (Sep. 10, 2026)
-    USD: 1 / 17.5,
-    EUR: 1 / 20.4,
+    USD: 1 / 600, // 1 USD ≈ 600 XOF
+    EUR: 1 / 655, // 1 EUR ≈ 655 XOF
   }
 };
 

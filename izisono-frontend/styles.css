@@ -100,13 +100,3 @@
 #loginPassword[hidden]{display:none!important;}
 .profile-settings{margin-top:18px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px}.profile-settings h3{margin:5px 0}.profile-settings p{margin:0;color:var(--muted);font-size:13px}.profile-setting-row{display:flex;gap:10px;margin-top:14px}.profile-setting-row input{flex:1;min-width:0;border:1px solid var(--line);border-radius:12px;padding:12px 14px;font:inherit}.profile-settings small{display:block;margin-top:8px;color:#31804b}.footer-links{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap}.footer-links a{color:inherit;text-decoration:underline}
 @media(max-width:560px){.profile-setting-row{flex-direction:column}.profile-setting-row .btn{width:100%}}
-
-/* V15 — voice dictation + stable in-page navigation */
-.voice-field{position:relative;display:block}
-.voice-field textarea{width:100%;padding-right:58px;min-height:120px}
-.voice-input-btn{position:absolute;right:10px;top:10px;width:40px;height:40px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer;font-size:19px;display:grid;place-items:center;box-shadow:0 5px 14px rgba(61,43,28,.08);transition:transform .15s,background .15s,border-color .15s}
-.voice-input-btn:hover{transform:translateY(-1px);border-color:#e9b39e;background:#fff7f2}
-.voice-input-btn.listening{background:#fff0e9;border-color:var(--accent);animation:voicePulse 1.1s infinite}
-@keyframes voicePulse{50%{transform:scale(1.06);box-shadow:0 0 0 8px rgba(232,93,42,.08)}}
-.payment-info{line-height:1.55}
-@media(max-width:560px){.voice-input-btn{right:8px;top:8px;width:38px;height:38px}.voice-field textarea{padding-right:54px}}

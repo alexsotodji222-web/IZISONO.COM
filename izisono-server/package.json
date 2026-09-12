@@ -1,6 +1,6 @@
 {
   "name": "izisono",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "description": "Studio de composition musicale assisté par IA avec support multilingue pour le Togo",
   "type": "module",
   "main": "server.js",
@@ -17,7 +17,6 @@
     "multilingual",
     "i18n",
     "xof",
-    "paydunya",
     "streaming"
   ],
   "author": "izisono Team",
