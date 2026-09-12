@@ -1,0 +1,3 @@
+.env
+node_modules/
+data/processed-paydunya-payments.json
